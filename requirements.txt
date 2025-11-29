@@ -1,6 +1,11 @@
 # Google Agent Development Kit
+google-adk>=0.1.0
 google-genai==1.0.0
 google-cloud-aiplatform==1.73.0
+
+# PDF Processing
+pypdf2==3.0.1
+pdfplumber==0.11.0
 
 # Data Science & ML
 pandas==2.1.0
@@ -31,3 +36,4 @@ loguru==0.7.2
 # For notebook development (Optional)
 jupyter==1.0.0
 ipykernel==6.25.0
+holidays==0.35

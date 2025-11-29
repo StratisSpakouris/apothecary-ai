@@ -1,0 +1,167 @@
+# Apothecary-AI .gitignore
+
+# ==============================================================================
+# ENVIRONMENT & SECRETS
+# ==============================================================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+credentials.json
+service-account*.json
+
+# ==============================================================================
+# PYTHON
+# ==============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# ==============================================================================
+# IDEs & EDITORS
+# ==============================================================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ==============================================================================
+# OPERATING SYSTEM
+# ==============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ==============================================================================
+# DATA FILES (Keep structure, ignore large files)
+# ==============================================================================
+# Processed outputs
+data/eody_reports/processed/*.json
+data/eody_reports/test_outputs/
+data/outputs/
+data/cache/
+*.pkl
+*.pickle
+
+# Large data files (keep structure, ignore content)
+# Uncomment if you want to ignore all data:
+# data/raw/**/*.csv
+# data/eody_reports/uploads/**/*.pdf
+
+# ==============================================================================
+# TESTING FILES (exclude from commits)
+# ==============================================================================
+scripts/test_*.py
+test_manual_run.sh
+TESTING.md
+
+# ==============================================================================
+# LOGS & TEMPORARY FILES
+# ==============================================================================
+*.log
+logs/
+temp/
+tmp/
+*.tmp
+*.bak
+
+# ==============================================================================
+# ADK & MODEL ARTIFACTS
+# ==============================================================================
+.adk_cache/
+model_cache/
+checkpoints/
+
+# ==============================================================================
+# STREAMLIT
+# ==============================================================================
+.streamlit/secrets.toml

@@ -1,0 +1,20 @@
+medication,category,unit_cost,shelf_life_months,case_size,daily_doses,is_chronic
+Metformin 500mg,diabetes,2.5,24,100,2.0,True
+Metformin 1000mg,diabetes,3.0,24,100,2.0,True
+Insulin Glargine,diabetes,45.0,18,10,1.0,True
+Lisinopril 10mg,cardiovascular,1.2,36,100,1.0,True
+Lisinopril 20mg,cardiovascular,1.5,36,100,1.0,True
+Atorvastatin 20mg,cardiovascular,2.0,36,100,1.0,True
+Amlodipine 5mg,cardiovascular,1.8,36,100,1.0,True
+Tamiflu 75mg,antiviral,18.0,18,50,2.0,False
+Amoxicillin 500mg,antibiotic,0.8,24,50,3.0,False
+Azithromycin 250mg,antibiotic,2.5,24,30,1.0,False
+Omeprazole 20mg,gastrointestinal,1.5,24,100,1.0,True
+Pantoprazole 40mg,gastrointestinal,2.0,24,100,1.0,True
+Levothyroxine 50mcg,thyroid,1.0,24,100,1.0,True
+Levothyroxine 100mcg,thyroid,1.2,24,100,1.0,True
+Albuterol Inhaler,respiratory,25.0,12,12,0.5,True
+Sertraline 50mg,mental_health,1.5,36,100,1.0,True
+Gabapentin 300mg,pain,0.8,36,100,3.0,True
+Cetirizine 10mg,allergy,0.3,36,100,1.0,False
+Fluticasone Nasal Spray,allergy,15.0,24,12,1.0,False
