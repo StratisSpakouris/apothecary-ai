@@ -15,9 +15,18 @@ from src.agents.adk_base_agent import ADKAgent
 from src.agents.patient_profiling import PatientProfilingAgent
 from src.agents.external_signals import ExternalSignalsAgent
 from src.agents.document_parser import DocumentParserAgent
+from src.agents.forecasting import ForecastingAgent
+from src.agents.optimization import OptimizationAgent
 
 # LLM-powered agents (use ADK + Gemini)
 from src.agents.report_analyst import ReportAnalystAgent
+
+# A2A wrapper agents (for orchestrator)
+from src.agents.a2a_wrappers import (
+    PatientAnalysisA2AAgent,
+    ForecastingA2AAgent,
+    CompleteAnalysisA2AAgent
+)
 
 
 __all__ = [
@@ -28,7 +37,14 @@ __all__ = [
     "PatientProfilingAgent",
     "ExternalSignalsAgent",
     "DocumentParserAgent",
+    "ForecastingAgent",
+    "OptimizationAgent",
 
     # LLM-powered agents
     "ReportAnalystAgent",
+
+    # A2A wrapper agents
+    "PatientAnalysisA2AAgent",
+    "ForecastingA2AAgent",
+    "CompleteAnalysisA2AAgent",
 ]

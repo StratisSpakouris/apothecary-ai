@@ -143,6 +143,7 @@ data/cache/
 scripts/test_*.py
 test_manual_run.sh
 TESTING.md
+test_results/
 
 # ==============================================================================
 # LOGS & TEMPORARY FILES
