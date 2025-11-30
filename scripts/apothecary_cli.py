@@ -13,7 +13,15 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import argparse
+import json
 from src.orchestrator import ApothecaryOrchestrator
+from src.agui_protocol import (
+    StatusUpdate,
+    ResultMessage,
+    SuggestionsMessage,
+    FinalResponse,
+    AgentStatus
+)
 from colorama import init, Fore, Style
 
 # Initialize colorama for cross-platform colored output
@@ -95,10 +103,118 @@ def print_examples():
         print()
 
 
+def render_agui_message(message):
+    """Render an AG-UI message with appropriate formatting"""
+    if isinstance(message, StatusUpdate):
+        # Status update
+        status_icon = {
+            AgentStatus.STARTING: "🔄",
+            AgentStatus.WORKING: "⚙️ ",
+            AgentStatus.COMPLETED: "✅",
+            AgentStatus.FAILED: "❌"
+        }.get(message.status, "•")
+
+        print(f"{Fore.BLUE}{status_icon} [{message.agent}]{Style.RESET_ALL} {message.message}")
+
+    elif isinstance(message, ResultMessage):
+        # Result message
+        print(f"\n{Fore.GREEN}✓ {message.agent} completed:{Style.RESET_ALL}")
+        print(f"  {message.summary}")
+        if message.reasoning:
+            print(f"  {Fore.CYAN}→{Style.RESET_ALL} {message.reasoning}")
+
+    elif isinstance(message, SuggestionsMessage):
+        # Suggestions
+        print(f"\n{Fore.YELLOW}📋 Suggested Next Actions:{Style.RESET_ALL}")
+        for i, action in enumerate(message.actions, 1):
+            print(f"  {Fore.YELLOW}[{i}]{Style.RESET_ALL} {action.label}")
+            print(f"      {Fore.CYAN}{action.description}{Style.RESET_ALL}")
+
+    elif isinstance(message, FinalResponse):
+        # Final response
+        print(f"\n{Fore.GREEN}{'='*80}{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}✓ {message.summary}{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}{'='*80}{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Execution time: {message.execution_time_seconds:.2f}s{Style.RESET_ALL}")
+
+
+def render_agui_response(response):
+    """Render a complete AG-UI response"""
+    if isinstance(response, FinalResponse):
+        # Render all collected messages
+        for result in response.results:
+            render_agui_message(result)
+
+        # Render final summary
+        print(f"\n{Fore.GREEN}{'='*80}{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}✓ {response.summary}{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}{'='*80}{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Execution time: {response.execution_time_seconds:.2f}s{Style.RESET_ALL}")
+
+        # Render suggestions if available
+        if response.suggestions:
+            print(f"\n{Fore.YELLOW}📋 Suggested Next Actions:{Style.RESET_ALL}")
+            for i, action in enumerate(response.suggestions.actions, 1):
+                print(f"  {Fore.YELLOW}[{i}]{Style.RESET_ALL} {action.label}")
+                print(f"      {Fore.CYAN}{action.description}{Style.RESET_ALL}")
+
+            return response.suggestions  # Return for interactive selection
+
+    else:
+        # Non-AG-UI response (fallback)
+        print(response)
+
+    return None
+
+
+def handle_suggestion_selection(orchestrator: ApothecaryOrchestrator, suggestions: SuggestionsMessage):
+    """Handle user selection of a suggested action"""
+    if not suggestions or not suggestions.actions:
+        return None
+
+    print(f"\n{Fore.YELLOW}Select an action (1-{len(suggestions.actions)}) or press Enter to skip:{Style.RESET_ALL}")
+
+    try:
+        selection = input(f"{Fore.CYAN}>>> {Style.RESET_ALL}").strip()
+
+        if not selection:
+            return None
+
+        try:
+            index = int(selection) - 1
+            if 0 <= index < len(suggestions.actions):
+                selected_action = suggestions.actions[index]
+                print(f"\n{Fore.GREEN}Executing: {selected_action.label}{Style.RESET_ALL}\n")
+
+                # Route the selected action
+                if orchestrator.action_router:
+                    import asyncio
+                    result = asyncio.run(orchestrator.action_router.route_action(selected_action))
+                    return result
+                else:
+                    print(f"{Fore.RED}Action routing not available{Style.RESET_ALL}")
+                    return None
+            else:
+                print(f"{Fore.RED}Invalid selection{Style.RESET_ALL}")
+                return None
+
+        except ValueError:
+            print(f"{Fore.RED}Invalid input{Style.RESET_ALL}")
+            return None
+
+    except Exception as e:
+        print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
+        return None
+
+
 def interactive_mode(orchestrator: ApothecaryOrchestrator):
-    """Run interactive CLI mode"""
+    """Run interactive CLI mode with AG-UI support"""
     print_header()
     print(f"{Fore.GREEN}Interactive Mode - Type your query or /help for assistance{Style.RESET_ALL}\n")
+
+    # Register AG-UI callback for real-time updates
+    if orchestrator.agui:
+        orchestrator.agui.register_callback(render_agui_message)
 
     while True:
         try:
@@ -122,13 +238,21 @@ def interactive_mode(orchestrator: ApothecaryOrchestrator):
                 continue
 
             # Process via orchestrator
-            print(f"\n{Fore.YELLOW}Processing...{Style.RESET_ALL}\n")
+            print()  # Blank line
 
             response = orchestrator.run(user_input)
 
-            print(f"{Fore.GREEN}Response:{Style.RESET_ALL}")
-            print(response)
-            print()
+            # Render AG-UI response
+            suggestions = render_agui_response(response)
+
+            # Handle suggested actions
+            if suggestions:
+                follow_up = handle_suggestion_selection(orchestrator, suggestions)
+                if follow_up:
+                    # Render follow-up response
+                    render_agui_response(follow_up)
+
+            print()  # Blank line
 
         except KeyboardInterrupt:
             print(f"\n\n{Fore.YELLOW}Interrupted. Use /quit to exit{Style.RESET_ALL}\n")
@@ -138,15 +262,24 @@ def interactive_mode(orchestrator: ApothecaryOrchestrator):
 
 
 def single_query_mode(orchestrator: ApothecaryOrchestrator, query: str):
-    """Run single query and exit"""
+    """Run single query and exit with AG-UI support"""
     print_header()
     print(f"{Fore.CYAN}Query:{Style.RESET_ALL} {query}\n")
-    print(f"{Fore.YELLOW}Processing...{Style.RESET_ALL}\n")
+
+    # Register AG-UI callback for real-time updates
+    if orchestrator.agui:
+        orchestrator.agui.register_callback(render_agui_message)
 
     try:
         response = orchestrator.run(query)
-        print(f"{Fore.GREEN}Response:{Style.RESET_ALL}")
-        print(response)
+
+        # Render AG-UI response
+        suggestions = render_agui_response(response)
+
+        # Show suggestions in single query mode but don't prompt
+        if suggestions:
+            print(f"\n{Fore.CYAN}(Interactive mode would allow selecting these actions){Style.RESET_ALL}")
+
         print()
 
     except Exception as e:

@@ -328,7 +328,27 @@ OptimizationConfig(
 
 ## 🚀 Usage
 
-### Interactive CLI (A2A Protocol) ⭐ **Recommended**
+### 🎨 Streamlit Dashboard (Web UI) ⭐ **Recommended for Non-Technical Users**
+```bash
+# Launch web-based dashboard
+streamlit run streamlit_app.py
+```
+
+**Features:**
+- Beautiful web interface in your browser
+- Real-time AG-UI message display with progress bars
+- Interactive charts and visualizations
+- Clickable suggestion buttons (no typing needed)
+- Quick action buttons for common tasks
+- Conversation history
+
+**Best for:** Pharmacy staff, visual analysis, multi-user access
+
+**See [STREAMLIT_DASHBOARD.md](STREAMLIT_DASHBOARD.md) for complete guide.**
+
+---
+
+### 💻 Interactive CLI (Terminal) **For Technical Users**
 ```bash
 # Start interactive mode
 python scripts/apothecary_cli.py
@@ -341,6 +361,16 @@ python scripts/apothecary_cli.py
 >>> Run complete inventory analysis and recommend orders
 ```
 
+**Features:**
+- Colored terminal output
+- Real-time AG-UI status updates
+- Interactive suggestion selection
+- Fast and lightweight
+
+**Best for:** Technical users, automation, scripts
+
+---
+
 ### Single Query Mode
 ```bash
 # Run a single query and exit
@@ -350,11 +380,15 @@ python scripts/apothecary_cli.py --query "Show me inventory for Metformin"
 python scripts/apothecary_cli.py --examples
 ```
 
+---
+
 ### Run Complete Pipeline (Direct)
 ```bash
 # Run all 4 stages sequentially
 python scripts/test_complete_pipeline.py
 ```
+
+---
 
 ### Process EODY Reports
 ```bash
@@ -362,7 +396,12 @@ python scripts/test_complete_pipeline.py
 python scripts/process_eody_reports.py
 ```
 
-**See [EXAMPLE_PROMPTS.md](EXAMPLE_PROMPTS.md) for detailed usage examples and use cases.**
+---
+
+**Documentation:**
+- [STREAMLIT_DASHBOARD.md](STREAMLIT_DASHBOARD.md) - Web UI guide
+- [EXAMPLE_PROMPTS.md](EXAMPLE_PROMPTS.md) - Example queries and use cases
+- [AGUI_PROTOCOL.md](AGUI_PROTOCOL.md) - AG-UI protocol documentation
 
 ---
 

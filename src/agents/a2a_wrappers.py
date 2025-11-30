@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 
-from google.adk import LlmAgent
+# Apply nest_asyncio to allow nested event loops (required for Streamlit)
+import nest_asyncio
+nest_asyncio.apply()
+
+from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from dotenv import load_dotenv
 
@@ -99,22 +103,58 @@ You will execute the analysis by calling the underlying PatientProfilingAgent an
             analysis_date=analysis_date
         )
 
-        # Format results
-        summary = {
-            "analysis_date": str(analysis_date),
-            "total_profiles": result.total_patient_medications,
-            "unique_patients": result.unique_patients,
-            "due_soon_7_days": result.patients_due_soon,
-            "high_risk_patients": sum(1 for p in result.profiles if p.risk_of_lapse >= 0.2),
-            "behavior_breakdown": {
-                "highly_regular": sum(1 for p in result.profiles if p.refill_pattern.behavior_classification == "highly_regular"),
-                "regular": sum(1 for p in result.profiles if p.refill_pattern.behavior_classification == "regular"),
-                "irregular": sum(1 for p in result.profiles if p.refill_pattern.behavior_classification == "irregular"),
-                "new_patient": sum(1 for p in result.profiles if p.refill_pattern.behavior_classification == "new_patient")
-            }
+        # Format results as natural language
+        high_risk = sum(1 for p in result.profiles if p.risk_of_lapse >= 0.2)
+        behavior = {
+            "highly_regular": sum(1 for p in result.profiles if p.behavior_type.value == "highly_regular"),
+            "regular": sum(1 for p in result.profiles if p.behavior_type.value == "regular"),
+            "irregular": sum(1 for p in result.profiles if p.behavior_type.value == "irregular"),
+            "new_patient": sum(1 for p in result.profiles if p.behavior_type.value == "new_patient")
         }
 
-        return json.dumps(summary, indent=2)
+        response = f"## 👥 Patient Refill Pattern Analysis\n\n"
+        response += f"**Analysis Date:** {analysis_date}\n\n"
+
+        # Overview
+        response += f"### 📊 Overview\n"
+        response += f"- **Total patient-medication profiles:** {result.total_patient_medications}\n"
+        response += f"- **Unique patients:** {result.total_patients}\n"
+        response += f"- **Patients due for refill soon (7 days):** {result.patients_due_soon}\n"
+        response += f"- **High-risk patients (≥20% lapse risk):** {high_risk}\n\n"
+
+        # Behavior Breakdown
+        response += f"### 🎯 Behavior Classification\n\n"
+        total = sum(behavior.values())
+        for behavior_type, count in behavior.items():
+            percentage = (count / total * 100) if total > 0 else 0
+            label = behavior_type.replace('_', ' ').title()
+            response += f"**{label}:** {count} patients ({percentage:.1f}%)\n"
+            if behavior_type == "highly_regular":
+                response += f"  - Very consistent refill patterns, low risk\n"
+            elif behavior_type == "regular":
+                response += f"  - Consistent patterns with minor variations\n"
+            elif behavior_type == "irregular":
+                response += f"  - Inconsistent patterns, higher monitoring needed\n"
+            elif behavior_type == "new_patient":
+                response += f"  - Insufficient history for pattern analysis\n"
+            response += "\n"
+
+        # Insights
+        response += f"### 💡 Key Insights\n\n"
+        if result.patients_due_soon > 0:
+            response += f"- ⚠️ **{result.patients_due_soon} patients** need refills within the next 7 days\n"
+
+        if high_risk > 0:
+            response += f"- 🚨 **{high_risk} patients** at high risk of medication lapse (≥20% risk)\n"
+
+        irregular_pct = (behavior['irregular'] / total * 100) if total > 0 else 0
+        if irregular_pct > 30:
+            response += f"- 📈 **{irregular_pct:.1f}%** of patients have irregular refill patterns\n"
+
+        if not result.patients_due_soon and not high_risk:
+            response += f"- ✅ No immediate concerns - patients are on track with refills\n"
+
+        return response
 
     def execute(self, analysis_date: Optional[date] = None) -> str:
         """Synchronous execution wrapper"""
@@ -217,34 +257,107 @@ You will execute forecasting by coordinating with PatientAnalysisAgent and Exter
                 medication_db['category'] == category_filter
             ]['medication'].tolist()
 
-            # Filter forecasts
+            # Filter forecasts (daily forecasts)
             filtered_forecasts = [
                 f for f in forecast_result.medication_forecasts
                 if f.medication in category_meds
             ]
 
-            total_demand = sum(f.total_predicted_demand for f in filtered_forecasts)
-            avg_confidence = sum(f.average_confidence for f in filtered_forecasts) / len(filtered_forecasts) if filtered_forecasts else 0
+            # Aggregate by medication (sum daily forecasts)
+            medication_totals = {}
+            medication_confidence = {}
+            for forecast in filtered_forecasts:
+                if forecast.medication not in medication_totals:
+                    medication_totals[forecast.medication] = 0
+                    medication_confidence[forecast.medication] = []
+                medication_totals[forecast.medication] += forecast.predicted_demand
+                medication_confidence[forecast.medication].append(forecast.confidence)
 
-            summary = {
-                "forecast_period": f"{forecast_result.forecast_start_date} to {forecast_result.forecast_end_date}",
-                "category": category_filter,
-                "medications": len(filtered_forecasts),
-                "total_demand": total_demand,
-                "average_confidence": avg_confidence,
-                "flu_multiplier": external_signals.flu_activity.get_demand_multiplier() if external_signals.flu_activity else 1.0
-            }
+            total_demand = sum(medication_totals.values())
+            avg_confidence = sum(
+                sum(conf_list) / len(conf_list) for conf_list in medication_confidence.values()
+            ) / len(medication_confidence) if medication_confidence else 0
+
+            # Format as natural language
+            response = f"## 📈 Medication Demand Forecast - {category_filter.title()}\n\n"
+            response += f"**Forecast Period:** {forecast_result.forecast_start_date} to {forecast_result.forecast_end_date}\n\n"
+
+            response += f"### 📊 Category Overview\n"
+            response += f"- **Category:** {category_filter.title()}\n"
+            response += f"- **Medications forecasted:** {len(medication_totals)}\n"
+            response += f"- **Total predicted demand:** {total_demand:,.0f} units\n"
+            response += f"- **Average confidence:** {avg_confidence:.1%}\n\n"
+
+            # External factors
+            if external_signals.flu_activity:
+                flu_multiplier = external_signals.flu_activity.get_demand_multiplier()
+                response += f"### 🌡️ External Factors\n"
+                response += f"- **Flu activity level:** {external_signals.flu_activity.level}/10 ({external_signals.flu_activity.trend})\n"
+                response += f"- **Demand multiplier:** {flu_multiplier:.2f}x\n\n"
+
+            # Top medications in category
+            if medication_totals:
+                response += f"### 💊 Top Medications by Demand\n\n"
+                sorted_meds = sorted(medication_totals.items(), key=lambda x: x[1], reverse=True)
+                for i, (med, total_demand_med) in enumerate(sorted_meds[:5], 1):
+                    avg_conf = sum(medication_confidence[med]) / len(medication_confidence[med])
+                    response += f"**{i}. {med}**\n"
+                    response += f"   - Predicted demand: {total_demand_med:,.0f} units\n"
+                    response += f"   - Daily average: {total_demand_med / forecast_days:.1f} units/day\n"
+                    response += f"   - Confidence: {avg_conf:.1%}\n\n"
+
+            return response
         else:
-            summary = {
-                "forecast_period": f"{forecast_result.forecast_start_date} to {forecast_result.forecast_end_date}",
-                "total_medications": forecast_result.summary.total_medications,
-                "total_demand": forecast_result.summary.total_predicted_demand,
-                "average_confidence": forecast_result.summary.average_confidence,
-                "high_priority_alerts": forecast_result.summary.high_priority_alerts,
-                "flu_multiplier": external_signals.flu_activity.get_demand_multiplier() if external_signals.flu_activity else 1.0
-            }
+            # Aggregate by medication (sum daily forecasts)
+            medication_totals = {}
+            medication_confidence = {}
+            for forecast in forecast_result.medication_forecasts:
+                if forecast.medication not in medication_totals:
+                    medication_totals[forecast.medication] = 0
+                    medication_confidence[forecast.medication] = []
+                medication_totals[forecast.medication] += forecast.predicted_demand
+                medication_confidence[forecast.medication].append(forecast.confidence)
 
-        return json.dumps(summary, indent=2)
+            # Format as natural language
+            response = f"## 📈 Medication Demand Forecast\n\n"
+            response += f"**Forecast Period:** {forecast_result.forecast_start_date} to {forecast_result.forecast_end_date}\n\n"
+
+            response += f"### 📊 Forecast Overview\n"
+            response += f"- **Medications forecasted:** {forecast_result.summary.total_medications}\n"
+            response += f"- **Total predicted demand:** {forecast_result.summary.total_predicted_demand:,.0f} units\n"
+            response += f"- **Average confidence:** {forecast_result.summary.average_confidence:.1%}\n"
+            response += f"- **High-priority alerts:** {forecast_result.summary.high_priority_alerts}\n\n"
+
+            # External factors
+            if external_signals.flu_activity:
+                flu_multiplier = external_signals.flu_activity.get_demand_multiplier()
+                response += f"### 🌡️ External Factors\n"
+                response += f"- **Flu activity level:** {external_signals.flu_activity.level}/10 ({external_signals.flu_activity.trend})\n"
+                response += f"- **Demand multiplier:** {flu_multiplier:.2f}x\n\n"
+
+            # Top medications by demand
+            if medication_totals:
+                response += f"### 💊 Top Medications by Demand\n\n"
+                sorted_meds = sorted(medication_totals.items(), key=lambda x: x[1], reverse=True)
+                for i, (med, total_demand_med) in enumerate(sorted_meds[:10], 1):
+                    avg_conf = sum(medication_confidence[med]) / len(medication_confidence[med])
+                    response += f"**{i}. {med}**\n"
+                    response += f"   - Predicted demand: {total_demand_med:,.0f} units\n"
+                    response += f"   - Daily average: {total_demand_med / forecast_days:.1f} units/day\n"
+                    response += f"   - Confidence: {avg_conf:.1%}\n\n"
+
+            # Insights
+            response += f"### 💡 Key Insights\n\n"
+            if forecast_result.summary.high_priority_alerts > 0:
+                response += f"- ⚠️ **{forecast_result.summary.high_priority_alerts} high-priority alerts** detected - potential demand spikes expected\n"
+
+            if external_signals.flu_activity and external_signals.flu_activity.level >= 6:
+                response += f"- 🚨 **High flu activity** detected - increased demand expected for antivirals and respiratory medications\n"
+
+            if forecast_result.summary.high_priority_alerts == 0:
+                response += f"- ✅ No significant demand spikes expected - steady demand forecasted\n"
+
+            return response
 
     def execute(self, forecast_days: int = 30,
                target_date: Optional[date] = None,
@@ -356,43 +469,50 @@ This is the most comprehensive analysis - use when user wants order recommendati
             medication_db=self.medication_db
         )
 
-        # Format summary
+        # Format summary as natural language
         critical_orders = optimization_result.get_critical_orders()
 
-        summary = {
-            "analysis_date": str(analysis_date),
-            "patient_analysis": {
-                "total_profiles": patient_result.total_patient_medications,
-                "due_soon": patient_result.patients_due_soon
-            },
-            "external_signals": {
-                "flu_level": external_signals.flu_activity.level if external_signals.flu_activity else None,
-                "flu_multiplier": external_signals.flu_activity.get_demand_multiplier() if external_signals.flu_activity else 1.0
-            },
-            "forecast": {
-                "period": f"{forecast_result.forecast_start_date} to {forecast_result.forecast_end_date}",
-                "total_demand": forecast_result.summary.total_predicted_demand,
-                "confidence": forecast_result.summary.average_confidence
-            },
-            "optimization": {
-                "total_recommendations": optimization_result.summary.total_recommendations,
-                "critical_orders": optimization_result.summary.critical_orders,
-                "high_priority_orders": optimization_result.summary.high_priority_orders,
-                "total_order_cost": optimization_result.summary.total_order_cost,
-                "current_inventory_value": optimization_result.summary.total_current_value,
-                "critical_medications": [
-                    {
-                        "medication": order.medication,
-                        "order_quantity": order.recommended_order_quantity,
-                        "order_cost": order.order_cost,
-                        "stockout_risk": order.stockout_risk
-                    }
-                    for order in critical_orders[:5]
-                ] if critical_orders else []
-            }
-        }
+        response = f"## 📊 Complete Inventory Analysis\n\n"
+        response += f"**Analysis Date:** {analysis_date}\n\n"
 
-        return json.dumps(summary, indent=2)
+        # Patient Analysis
+        response += f"### 👥 Patient Analysis\n"
+        response += f"- Total patient-medication profiles: {patient_result.total_patient_medications}\n"
+        response += f"- Patients due for refill soon: {patient_result.patients_due_soon}\n\n"
+
+        # External Signals
+        if external_signals.flu_activity:
+            response += f"### 🌡️ External Signals\n"
+            response += f"- Flu activity level: {external_signals.flu_activity.level}/10 ({external_signals.flu_activity.trend})\n"
+            response += f"- Demand multiplier: {external_signals.flu_activity.get_demand_multiplier():.2f}x\n\n"
+
+        # Forecast
+        response += f"### 📈 Demand Forecast\n"
+        response += f"- Forecast period: {forecast_result.forecast_start_date} to {forecast_result.forecast_end_date}\n"
+        response += f"- Total predicted demand: {forecast_result.summary.total_predicted_demand:,} units\n"
+        response += f"- Average confidence: {forecast_result.summary.average_confidence:.1%}\n"
+        response += f"- Medications forecasted: {forecast_result.summary.total_medications}\n\n"
+
+        # Optimization
+        response += f"### 🎯 Optimization Results\n"
+        response += f"- Current inventory value: ${optimization_result.summary.total_current_value:,.2f}\n"
+        response += f"- Total order recommendations: {optimization_result.summary.total_recommendations}\n"
+        response += f"- Critical orders (immediate): {optimization_result.summary.critical_orders}\n"
+        response += f"- High priority orders: {optimization_result.summary.high_priority_orders}\n"
+        response += f"- Total recommended order cost: ${optimization_result.summary.total_order_cost:,.2f}\n\n"
+
+        # Critical medications
+        if critical_orders:
+            response += f"### 🚨 Critical Orders (Immediate Action Required)\n\n"
+            for i, order in enumerate(critical_orders[:5], 1):
+                response += f"**{i}. {order.medication}**\n"
+                response += f"   - Recommended order: {order.recommended_order_quantity} units\n"
+                response += f"   - Order cost: ${order.order_cost:,.2f}\n"
+                response += f"   - Stockout risk: {order.stockout_risk:.1%}\n\n"
+        else:
+            response += f"✅ **No critical orders needed.** Current inventory levels are sufficient.\n\n"
+
+        return response
 
     def execute(self, analysis_date: Optional[date] = None) -> str:
         """Synchronous execution wrapper"""
