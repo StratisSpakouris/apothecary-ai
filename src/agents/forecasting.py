@@ -352,7 +352,13 @@ class ForecastingAgent:
                 continue
             categories_seen.add(category)
 
-            avg_confidence = np.mean(data['confidences']) if data['confidences'] else 0.5
+            # Calculate average confidence with NaN handling
+            if data['confidences']:
+                avg_confidence = np.mean(data['confidences'])
+                if np.isnan(avg_confidence):
+                    avg_confidence = 0.5
+            else:
+                avg_confidence = 0.5
 
             # Determine trend (simplified)
             trend = "stable"  # TODO: Calculate actual trend
@@ -375,7 +381,7 @@ class ForecastingAgent:
                 forecast_date=forecast_date,
                 total_predicted_demand=data['total_demand'],
                 medication_count=len(data['medications']),
-                average_confidence=avg_confidence,
+                average_confidence=float(avg_confidence),  # Ensure Python float
                 trend=trend,
                 flu_impact=flu_impact,
                 weather_impact=weather_impact,
@@ -407,8 +413,14 @@ class ForecastingAgent:
         shortage_risks = sum(1 for f in medication_forecasts if DemandAlert.SHORTAGE_RISK in f.alerts)
         high_priority = spike_alerts + shortage_risks
 
-        # Average confidence
-        avg_confidence = np.mean([f.confidence for f in medication_forecasts])
+        # Average confidence (handle NaN)
+        if medication_forecasts:
+            avg_confidence = np.mean([f.confidence for f in medication_forecasts])
+            # Replace NaN with 0.0 (happens when no valid confidence values)
+            if np.isnan(avg_confidence):
+                avg_confidence = 0.0
+        else:
+            avg_confidence = 0.0
 
         # Data completeness
         if external_signals and external_signals.data_quality == "complete":
@@ -426,6 +438,6 @@ class ForecastingAgent:
             high_priority_alerts=high_priority,
             spike_alerts=spike_alerts,
             shortage_risks=shortage_risks,
-            average_confidence=avg_confidence,
+            average_confidence=float(avg_confidence),  # Ensure it's a Python float, not numpy
             data_completeness=data_completeness
         )

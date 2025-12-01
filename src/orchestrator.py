@@ -298,15 +298,23 @@ Your role is to understand the user's question and provide accurate, well-format
 - Include relevant context (totals, percentages, insights)
 - If data is not available, say so clearly
 
+**Multi-Step Queries:**
+When a query requires combining multiple datasets (e.g., "show inventory of medicines patient X has taken"):
+1. Identify all the steps needed (e.g., find patient's medications, then look up their inventory)
+2. Present ALL relevant data from each step
+3. Clearly organize the response with sections for each data type
+4. Make sure BOTH datasets are shown in the final response
+
 **Response Format:**
 Always use markdown formatting:
 - Use ## for main headers
+- Use ### for subsections
 - Use **bold** for emphasis
 - Use bullet points (-) for lists
 - Show numbers with proper formatting (commas for thousands)
 - Include insights or summary at the end when relevant
 
-Answer the user's question directly and completely."""
+Answer the user's question directly and completely. Never omit data that was provided to you."""
 
         return LlmAgent(
             name="DataQueryAgent",
@@ -383,18 +391,81 @@ Please analyze the data and provide a complete answer in well-formatted markdown
             return analysis_context
 
     def _analyze_query(self, query: str) -> str:
-        """Analyze query and prepare data"""
+        """
+        Analyze query and prepare comprehensive data context.
+        For complex/multi-step queries, provide all relevant data and let LLM reason.
+        """
         query_lower = query.lower()
+        self.logger.info(f"IntelligentQueryAgent analyzing: {query}")
 
-        # Detect query type and prepare relevant data
-        if "top" in query_lower or "bottom" in query_lower:
+        # For simple, well-known patterns, use optimized handlers
+        if ("top" in query_lower or "bottom" in query_lower) and "patient" in query_lower and "order" in query_lower:
+            # Simple ranking query - use optimized handler
             return self._handle_ranking_query(query, query_lower)
-        elif "patient" in query_lower and ("history" in query_lower or "taken" in query_lower or "prescriptions" in query_lower):
-            return self._handle_patient_history(query, query_lower)
+
+        # For everything else (including multi-step queries), provide comprehensive data
+        # Extract all potentially relevant data based on keywords
+        result_parts = []
+
+        # If query mentions patient, include patient data
+        if "patient" in query_lower:
+            # Try to extract patient ID
+            words = query.split()
+            patient_id = None
+            for i, word in enumerate(words):
+                if word.lower() == "patient" and i + 1 < len(words):
+                    patient_id = words[i + 1].strip('.,!?')
+                    break
+
+            if patient_id:
+                self.logger.info(f"  Extracting data for patient {patient_id}")
+                patient_data = self.data_tools.prescription_data[
+                    self.data_tools.prescription_data['patient_id'] == patient_id
+                ]
+                if not patient_data.empty:
+                    self.logger.info(f"    Found {len(patient_data)} prescription records")
+                    result_parts.append(f"### Patient {patient_id} Prescription Data:\n")
+                    result_parts.append(patient_data.to_markdown(index=False))
+
+                    # If query also asks for inventory, automatically include it
+                    if "inventory" in query_lower or "stock" in query_lower:
+                        self.logger.info(f"    Query also asks for inventory - adding inventory data")
+                        patient_meds = patient_data['medication'].unique()
+                        self.logger.info(f"    Patient has taken {len(patient_meds)} unique medications: {list(patient_meds)}")
+                        inventory_data = self.data_tools.inventory_data[
+                            self.data_tools.inventory_data['medication'].isin(patient_meds)
+                        ]
+                        if not inventory_data.empty:
+                            self.logger.info(f"    Found inventory data for {len(inventory_data)} lots")
+                            inventory_summary = inventory_data.groupby('medication').agg({
+                                'quantity': 'sum',
+                                'unit_cost': 'mean'
+                            }).reset_index()
+                            inventory_summary['total_value'] = inventory_summary['quantity'] * inventory_summary['unit_cost']
+                            result_parts.append(f"\n\n### Inventory for Patient {patient_id}'s Medications:\n")
+                            result_parts.append(inventory_summary.to_markdown(index=False))
+                        else:
+                            self.logger.warning(f"    No inventory found for patient's medications")
+                            result_parts.append(f"\n\n### Inventory for Patient {patient_id}'s Medications:\n")
+                            result_parts.append("No inventory found for these medications.")
+                else:
+                    self.logger.warning(f"    No prescription data found for patient {patient_id}")
+                    result_parts.append(f"No prescription data found for patient {patient_id}.")
+
+        # If query asks for general inventory
         elif "inventory" in query_lower or "stock" in query_lower:
-            return self._handle_inventory_query(query, query_lower)
+            inventory_summary = self.data_tools.inventory_data.groupby('medication').agg({
+                'quantity': 'sum',
+                'unit_cost': 'mean'
+            }).reset_index()
+            inventory_summary['total_value'] = inventory_summary['quantity'] * inventory_summary['unit_cost']
+            result_parts.append("### Current Inventory:\n")
+            result_parts.append(inventory_summary.to_markdown(index=False))
+
+        if result_parts:
+            return "\n".join(result_parts)
         else:
-            return "Query type not clearly determined. Using general data context."
+            return "Could not extract relevant data for this query. Please provide more specific information."
 
     def _handle_ranking_query(self, query: str, query_lower: str) -> str:
         """Handle top/bottom ranking queries"""
@@ -825,7 +896,11 @@ Always choose the most efficient path: use tools for simple queries, use agents 
 
         if any(pattern in prompt_lower for pattern in patient_query_patterns) or \
            (("patient" in prompt_lower) and any(word in prompt_lower for word in ["medicines", "medications", "taken", "prescriptions"])):
-            if "patient" in prompt_lower:
+            # Check if query ALSO asks for inventory - if so, skip this handler and use intelligent agent
+            if "inventory" in prompt_lower or "stock" in prompt_lower:
+                # Fall through to intelligent query agent which handles multi-step queries
+                pass
+            elif "patient" in prompt_lower:
                 words = prompt.split()
                 for i, word in enumerate(words):
                     if word.lower() == "patient" and i + 1 < len(words):
@@ -1323,24 +1398,78 @@ Always choose the most efficient path: use tools for simple queries, use agents 
             agent_type = "forecasting"
             agent_name = "ForecastingAgent"
 
+            # Parse date from query (e.g., "March 2026", "next 60 days", "for April")
+            import re
+            from dateutil import parser
+            from datetime import datetime, timedelta
+            import calendar
+
+            target_month_date = None  # The month/date we want to forecast FOR
+            forecast_start_date = None  # When to start the forecast (defaults to today)
+            forecast_days = 30  # default
+
+            # Try to extract specific date mentions (e.g., "March 2026", "April 2025")
+            month_year_match = re.search(r'(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})', prompt_lower)
+            if month_year_match:
+                month_name = month_year_match.group(1).capitalize()
+                year = int(month_year_match.group(2))
+                # Target month to forecast FOR
+                target_month_date = datetime.strptime(f"{month_name} 1 {year}", "%B %d %Y").date()
+
+                # Calculate forecast horizon to reach that month
+                today = date.today()
+                if target_month_date > today:
+                    # Forecast from today to cover the target month
+                    days_to_target = (target_month_date - today).days
+                    # Get number of days in target month
+                    _, days_in_month = calendar.monthrange(year, target_month_date.month)
+                    # Forecast enough days to cover from today through the entire target month
+                    forecast_days = days_to_target + days_in_month
+                    forecast_start_date = today
+                else:
+                    # If target month is in the past or current month, just use it as start date
+                    forecast_start_date = target_month_date
+                    forecast_days = 30
+
+            # Try to extract "next X days" or "X days"
+            days_match = re.search(r'(?:next\s+)?(\d+)\s+days?', prompt_lower)
+            if days_match:
+                forecast_days = int(days_match.group(1))
+
+            # Try to extract category filter
+            category_filter = None
+            for cat in self.data_tools.medication_db['category'].unique():
+                if cat.lower() in prompt_lower:
+                    category_filter = cat
+                    break
+
             if self.agui:
+                if target_month_date and target_month_date > date.today():
+                    date_msg = f" for {target_month_date.strftime('%B %Y')}"
+                else:
+                    date_msg = f" starting {forecast_start_date}" if forecast_start_date else ""
+
                 self.agui.status(
                     agent="PatientProfilingAgent",
-                    message="Analyzing patient refill patterns to predict demand...",
+                    message="Analyzing current patient refill patterns to predict future demand...",
                     status=AgentStatus.WORKING
                 )
                 self.agui.status(
                     agent="ExternalSignalsAgent",
-                    message="Gathering external health signals (flu activity, weather data, events)...",
+                    message="Gathering external health signals...",
                     status=AgentStatus.WORKING
                 )
                 self.agui.status(
                     agent=agent_name,
-                    message="Generating 30-day demand forecast with confidence intervals...",
+                    message=f"Generating {forecast_days}-day demand forecast{date_msg}...",
                     status=AgentStatus.WORKING
                 )
 
-            result = self.forecasting_agent.execute()
+            result = self.forecasting_agent.execute(
+                forecast_days=forecast_days,
+                target_date=forecast_start_date,
+                category_filter=category_filter
+            )
             # Handle both JSON and formatted markdown responses
             try:
                 result_data = json.loads(result) if result and not result.strip().startswith("##") else {"formatted_response": result}

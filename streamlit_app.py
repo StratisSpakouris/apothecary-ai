@@ -25,6 +25,7 @@ from src.agui_protocol import (
 )
 from src.streamlit_components.charts import (
     render_inventory_chart,
+    render_inventory_overview_with_chart,
     render_forecast_chart,
     render_patient_analysis_chart,
     render_optimization_summary,
@@ -429,16 +430,24 @@ def main():
         st.session_state.agui_messages = []
 
         try:
-            with st.spinner(f"🔄 Processing query: {default_query[:50]}..."):
-                response = st.session_state.orchestrator.run(default_query)
+            # Special handling for inventory status query
+            if "inventory status" in default_query.lower():
+                with st.spinner(f"🔄 Loading inventory..."):
+                    # Just render the chart directly, no need to process through orchestrator
+                    st.markdown("---")
+                    render_inventory_overview_with_chart()
+            else:
+                with st.spinner(f"🔄 Processing query: {default_query[:50]}..."):
+                    response = st.session_state.orchestrator.run(default_query)
 
-                # Add to conversation history
-                st.session_state.conversation_history.append({
-                    "query": default_query,
-                    "timestamp": datetime.now().isoformat(),
-                    "messages": st.session_state.agui_messages.copy(),
-                    "response": response
-                })
+                    # Add to conversation history
+                    st.session_state.conversation_history.append({
+                        "query": default_query,
+                        "timestamp": datetime.now().isoformat(),
+                        "messages": st.session_state.agui_messages.copy(),
+                        "response": response
+                    })
+
         except Exception as e:
             import traceback
             st.error(f"❌ Error occurred: {str(e)}")

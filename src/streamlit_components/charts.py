@@ -36,8 +36,84 @@ def load_inventory_data():
         return None
 
 
+def render_inventory_overview_with_chart():
+    """Render inventory overview with table and pie chart side-by-side"""
+    inventory = load_inventory_data()
+
+    if inventory is None:
+        st.warning("No inventory data available")
+        return
+
+    # Group by medication to get totals
+    medication_summary = inventory.groupby('medication').agg({
+        'quantity': 'sum',
+        'unit_cost': 'mean',
+        'category': 'first'
+    }).reset_index()
+
+    medication_summary['total_value'] = (
+        medication_summary['quantity'] * medication_summary['unit_cost']
+    )
+
+    # Sort by quantity descending
+    medication_summary = medication_summary.sort_values('quantity', ascending=False)
+
+    # Summary metrics at top
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        total_value = medication_summary['total_value'].sum()
+        st.metric("Total Inventory Value", f"${total_value:,.2f}")
+
+    with col2:
+        total_items = len(medication_summary)
+        st.metric("Unique Medications", total_items)
+
+    with col3:
+        total_quantity = medication_summary['quantity'].sum()
+        st.metric("Total Units", f"{total_quantity:,}")
+
+    st.markdown("---")
+
+    # Two columns: Table on left, Chart on right
+    col_table, col_chart = st.columns([1, 1])
+
+    with col_table:
+        st.markdown("### 📋 Inventory Table")
+        # Display table with formatting
+        display_df = medication_summary[['medication', 'quantity', 'category']].copy()
+        display_df.columns = ['Medication', 'Quantity', 'Category']
+
+        st.dataframe(
+            display_df.style.format({
+                'Quantity': '{:,.0f}'
+            }),
+            use_container_width=True,
+            height=400
+        )
+
+    with col_chart:
+        st.markdown("### 📊 Distribution by Category")
+        # Group by category for pie chart
+        category_summary = medication_summary.groupby('category')['quantity'].sum().reset_index()
+
+        # Create pie chart
+        fig = px.pie(
+            category_summary,
+            values='quantity',
+            names='category',
+            title='Inventory Distribution',
+            color_discrete_sequence=px.colors.sequential.Blues_r
+        )
+
+        fig.update_layout(height=400)
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+
+        st.plotly_chart(fig, use_container_width=True)
+
+
 def render_inventory_chart():
-    """Render inventory overview chart"""
+    """Render inventory overview chart (legacy - bar chart version)"""
     inventory = load_inventory_data()
 
     if inventory is None:

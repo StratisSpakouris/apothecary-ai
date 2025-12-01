@@ -246,7 +246,8 @@ You will execute forecasting by coordinating with PatientAnalysisAgent and Exter
         forecast_result = forecasting_agent.execute(
             patient_profiles=patient_result,
             external_signals=external_signals,
-            historical_data=self.prescription_data
+            historical_data=self.prescription_data,
+            start_date=target_date
         )
 
         # Filter by category if requested
@@ -451,7 +452,8 @@ This is the most comprehensive analysis - use when user wants order recommendati
         forecast_result = forecasting_agent.execute(
             patient_profiles=patient_result,
             external_signals=external_signals,
-            historical_data=self.prescription_data
+            historical_data=self.prescription_data,
+            start_date=target_date
         )
 
         # Stage 4: Optimization

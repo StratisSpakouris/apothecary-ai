@@ -86,6 +86,9 @@ ipython_config.py
 .vscode/
 *.code-workspace
 
+# Claude Code
+.claudeignore
+
 # PyCharm
 .idea/
 *.iml
@@ -142,9 +145,17 @@ data/cache/
 # TESTING FILES (exclude from commits)
 # ==============================================================================
 scripts/test_*.py
+scripts/apothecary_cli.py
 test_manual_run.sh
 TESTING.md
 test_results/
+
+# Documentation files (keep only SYSTEM_OVERVIEW.md)
+documentation/TESTING.md
+documentation/EXAMPLE_PROMPTS.md
+documentation/A2A_QUICK_REFERENCE.md
+documentation/AGUI_PROTOCOL.md
+documentation/STREAMLIT_DASHBOARD.md
 
 # ==============================================================================
 # LOGS & TEMPORARY FILES
