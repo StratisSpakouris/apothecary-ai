@@ -208,9 +208,9 @@ Tools    Agent      (A2A)         Agent
 
 ---
 
-## 🧪 Test Results (Latest Run)
+## 🧪 Test Results (Example)
 
-**Test Date**: 2025-11-30 13:01:42
+**Test Date**: 2025-11-30
 
 ### Stage 1: Patient Profiling
 ```
@@ -395,14 +395,6 @@ python scripts/test_complete_pipeline.py
 # Place PDFs in data/eody_reports/uploads/
 python scripts/process_eody_reports.py
 ```
-
----
-
-**Documentation:**
-- [STREAMLIT_DASHBOARD.md](STREAMLIT_DASHBOARD.md) - Web UI guide
-- [EXAMPLE_PROMPTS.md](EXAMPLE_PROMPTS.md) - Example queries and use cases
-- [AGUI_PROTOCOL.md](AGUI_PROTOCOL.md) - AG-UI protocol documentation
-
 ---
 
 ## 🌍 Supported Regions
@@ -475,23 +467,3 @@ python scripts/process_eody_reports.py
 - **python-dateutil**: 2.8.2 (date handling)
 
 ---
-
-## 📄 License & Credits
-
-**Framework**: Google Agent Development Kit (ADK)
-**LLM**: Google Gemini 2.5 Flash
-**Forecasting**: Facebook Prophet
-
----
-
-## 🎯 Success Metrics
-
-✅ **Complete end-to-end pipeline functional**
-✅ **All 6 agents implemented and tested**
-✅ **Processes 3,646 prescription records**
-✅ **Generates 420 daily forecasts (14 meds × 30 days)**
-✅ **Manages $46K inventory value**
-✅ **71% average forecast confidence**
-✅ **Zero stockouts predicted with current inventory**
-
-**System Status**: Production-ready for Greek pharmacies 🇬🇷
